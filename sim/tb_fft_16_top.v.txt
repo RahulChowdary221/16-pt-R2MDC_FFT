@@ -1,0 +1,79 @@
+`timescale 1ns / 1ps
+
+module tb_fft_16_top();
+
+    // 1. Declare Testbench Signals
+    reg clk;
+    reg rst;
+    reg signed [15:0] din_real;
+    reg signed [15:0] din_imag;
+
+    wire signed [15:0] dout_top_real;
+    wire signed [15:0] dout_top_imag;
+    wire signed [15:0] dout_bot_real;
+    wire signed [15:0] dout_bot_imag;
+
+    // 2. Instantiate the Unit Under Test (UUT)
+    fft_16_top uut (
+        .clk(clk),
+        .rst(rst),
+        .din_real(din_real),
+        .din_imag(din_imag),
+        .dout_top_real(dout_top_real),
+        .dout_top_imag(dout_top_imag),
+        .dout_bot_real(dout_bot_real),
+        .dout_bot_imag(dout_bot_imag)
+    );
+
+    // 3. Clock Generation (100MHz)
+    always #5 clk = ~clk; 
+
+    integer i;
+
+    // 4. Test Stimulus
+    initial begin
+        // --- SYSTEM RESET ---
+        clk = 0;
+        rst = 1; // Assert reset to flush all delay line 'X' states
+        din_real = 16'h0000;
+        din_imag = 16'h0000;
+
+        #50;     // Hold reset for 5 clock cycles
+        rst = 0; // Release reset
+        #10;     // Align with the next clock edge
+
+
+        // --- CHOOSE YOUR TEST BELOW ---
+        // (Comment out the one you don't want to run)
+
+        /* // TEST A: THE IMPULSE TEST
+        // Feeds one single maximum value, followed by 15 zeros.
+        din_real = 16'h7FFF; din_imag = 16'h0000;
+        #10; 
+        for (i = 0; i < 15; i = i + 1) begin
+            din_real = 16'h0000; din_imag = 16'h0000;
+            #10;
+        end
+        */
+
+        // TEST B: THE DC TEST
+        // Feeds a constant signal across the entire 16-point frame.
+        for (i = 0; i < 16; i = i + 1) begin
+            din_real = 16'h7FFF; 
+            din_imag = 16'h0000;
+            #10;
+        end
+
+        // --- PIPELINE FLUSH ---
+        // Feed zeros so we can watch the data empty out of the stages
+        din_real = 16'h0000;
+        din_imag = 16'h0000;
+
+        // Wait enough time (50 clock cycles) to see the final outputs
+        #500;
+        
+        $display("Simulation Complete.");
+        $finish;
+    end
+
+endmodule

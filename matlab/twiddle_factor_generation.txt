@@ -1,0 +1,45 @@
+% 16-Point Radix-2 FFT Twiddle Factor Generator for Vivado ROM
+clc; clear; close all;
+
+N = 16;
+% Radix-2 only needs N/2 twiddle factors due to symmetry
+k = 0:(N/2 - 1); 
+
+% 1. Calculate the theoretical complex twiddle factors
+W = exp(-1i * 2 * pi * k / N);
+
+% 2. Separate into Real and Imaginary components
+W_real = real(W);
+W_imag = imag(W);
+
+% 3. Convert to Q15 Fixed-Point Format
+% Multiply by 32767 (0x7FFF), the max value for a 16-bit signed integer
+Q15_real = round(W_real * 32767);
+Q15_imag = round(W_imag * 32767);
+
+% 4. Convert to 16-bit Two's Complement format for Verilog
+hex_real = mod(Q15_real, 65536);
+hex_imag = mod(Q15_imag, 65536);
+
+% 5. Write out the Vivado .COE Files
+write_coe('twiddle_real.coe', hex_real);
+write_coe('twiddle_imag.coe', hex_imag);
+
+disp('Successfully generated twiddle_real.coe and twiddle_imag.coe for Vivado!');
+
+% --- Helper Function to format the .COE file ---
+function write_coe(filename, data)
+    fid = fopen(filename, 'w');
+    % Vivado requires these two header lines
+    fprintf(fid, 'memory_initialization_radix=16;\n');
+    fprintf(fid, 'memory_initialization_vector=\n');
+    
+    for i = 1:length(data)
+        if i == length(data)
+            fprintf(fid, '%04X;', data(i)); % Final value gets a semicolon
+        else
+            fprintf(fid, '%04X,\n', data(i)); % Others get a comma
+        end
+    end
+    fclose(fid);
+end
