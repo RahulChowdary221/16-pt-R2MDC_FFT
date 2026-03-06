@@ -7,7 +7,7 @@
 
 ## 📌 Project Overview
 This repository contains the RTL implementation of a 16-point, continuous-flow Fast Fourier Transform (FFT) hardware accelerator. Designed from scratch in Verilog, this project bridges theoretical Digital Signal Processing (DSP) with practical VLSI implementation, utilizing a **Radix-2 Multi-path Delay Commutator (R2MDC)** architecture to achieve high throughput for real-time applications.
- <img width="1552" height="340" alt="image" src="https://github.com/user-attachments/assets/ee76a30d-156c-445b-86ee-5ade0761be9b" />
+ 
 
 ##  Hardware Architecture (R2MDC)
 The R2MDC architecture was selected for its efficient hardware utilization and ability to process continuous streaming data. 
@@ -16,6 +16,7 @@ The R2MDC architecture was selected for its efficient hardware utilization and a
 * **Commutators (Routing):** 2x2 crossbar switches synchronize the incoming data stream with the delayed data stream.
 * **Delay Lines:** Shift registers (FIFOs) queue the data to ensure the Butterfly Units receive the correct temporal samples simultaneously.
 * **Twiddle Factor ROMs:** Pre-computed complex coefficients are stored in local Block RAM arrays.
+   <img width="1552" height="340" alt="image" src="https://github.com/user-attachments/assets/ee76a30d-156c-445b-86ee-5ade0761be9b" />
 
 
 ##  Key Engineering Implementations
