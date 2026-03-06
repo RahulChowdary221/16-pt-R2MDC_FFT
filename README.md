@@ -17,7 +17,6 @@ The R2MDC architecture was selected for its efficient hardware utilization and a
 * **Delay Lines:** Shift registers (FIFOs) queue the data to ensure the Butterfly Units receive the correct temporal samples simultaneously.
 * **Twiddle Factor ROMs:** Pre-computed complex coefficients are stored in local Block RAM arrays.
 
-*(Note: Add a picture of your block diagram here later by dragging and dropping the image into the GitHub editor!)*
 
 ##  Key Engineering Implementations
 
