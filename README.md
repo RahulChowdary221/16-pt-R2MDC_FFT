@@ -129,6 +129,29 @@ Total latency:   19 cycles
 - Verified with DC input only. Sine wave test against MATLAB golden reference is pending.
 
 ---
+## Simulation Waveforms
+
+### DC Test — Verified Output
+![DC Verified]<img width="1577" height="418" alt="image" src="https://github.com/user-attachments/assets/3b9d6d1a-2435-41b0-ba23-5f6dc9f986e7" />
+
+*dout_valid goes HIGH at cycle 19. dout_top_real = 1000 (X[0] correct). All other bins = 0.*
+
+### Full Pipeline View
+![Full Pipeline]<img width="1577" height="551" alt="image" src="https://github.com/user-attachments/assets/74db86d1-9a23-4d6a-b971-cc57689ee34e" />
+
+*Shows reset → data input → pipeline fill (expected artifacts) → valid output window.*
+
+### Valid Flag Transition
+![Valid Transition]<img width="1559" height="487" alt="image" src="https://github.com/user-attachments/assets/814d3d72-c50b-436e-bee8-d46e64701ec3" />
+
+*Exact moment dout_valid goes HIGH — garbage suppressed, correct output begins.*\
+### Vivado Project Sources
+![Sources]<img width="642" height="803" alt="image" src="https://github.com/user-attachments/assets/1ce7a75b-c0ee-4c51-8ee0-6355c9aa7c73" />
+
+
+### Console Output
+![Console]<img width="1627" height="668" alt="image" src="https://github.com/user-attachments/assets/b615eb4c-6d72-4734-a67a-272b40b2ca51" />
+
 
 ## Directory Structure
 
