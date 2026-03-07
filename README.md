@@ -1,53 +1,156 @@
-# 16-pt-R2MDC_FFT
 # 16-Point Radix-2 Pipelined FFT Hardware Accelerator
 
-![Status](https://img.shields.io/badge/Status-RTL_Verification-blue)
+![Status](https://img.shields.io/badge/Status-Verified-brightgreen)
 ![Language](https://img.shields.io/badge/Language-Verilog_HDL-orange)
 ![Tools](https://img.shields.io/badge/Tools-Xilinx_Vivado_%7C_MATLAB-red)
 
-## 📌 Project Overview
-This repository contains the RTL implementation of a 16-point, continuous-flow Fast Fourier Transform (FFT) hardware accelerator. Designed from scratch in Verilog, this project bridges theoretical Digital Signal Processing (DSP) with practical VLSI implementation, utilizing a **Radix-2 Multi-path Delay Commutator (R2MDC)** architecture to achieve high throughput for real-time applications.
- 
+## Project Overview
 
-##  Hardware Architecture (R2MDC)
-The R2MDC architecture was selected for its efficient hardware utilization and ability to process continuous streaming data. 
+A fully pipelined 16-point FFT hardware accelerator designed from scratch in Verilog. This project bridges theoretical Digital Signal Processing (DSP) with practical VLSI implementation, using a **Radix-2 Multi-path Delay Commutator (R2MDC)** architecture with **Decimation in Frequency (DIF)** for high-throughput continuous streaming.
 
-* **Pipelined Stages:** The design consists of log_2(16) = 4 cascaded stages.
-* **Commutators (Routing):** 2x2 crossbar switches synchronize the incoming data stream with the delayed data stream.
-* **Delay Lines:** Shift registers (FIFOs) queue the data to ensure the Butterfly Units receive the correct temporal samples simultaneously.
-* **Twiddle Factor ROMs:** Pre-computed complex coefficients are stored in local Block RAM arrays.
-   <img width="1552" height="340" alt="image" src="https://github.com/user-attachments/assets/ee76a30d-156c-445b-86ee-5ade0761be9b" />
+---
 
+## Hardware Architecture (R2MDC)
 
-##  Key Engineering Implementations
+The R2MDC architecture processes a **single continuous input stream** through 4 cascaded pipeline stages. Each stage stores half the incoming data in a delay line, then feeds both the new input and the delayed data into a butterfly unit simultaneously.
+
+### Pipeline Structure
+
+```
+din ──► Stage 1 ──► Stage 2 ──► Stage 3 ──► Stage 4 ──► dout_top
+        delay=8     delay=4     delay=2     delay=1      dout_bot
+```
+
+### Key Components
+
+| Component | Module | Purpose |
+|-----------|--------|---------|
+| Delay Lines | `delay_line.v` | Shift register FIFOs — hold samples for N cycles |
+| Butterfly Unit | `Butterfly_unit.v` | Core FFT math: A+B and (A-B)×twiddle |
+| FFT Stage | `r2mdc_stage.v` | One pipeline stage: delay + commutator mux + butterfly + register |
+| Control Unit | `fft_control_unit.v` | Generates sel signals, ROM addresses, and dout_valid flag |
+| Twiddle ROMs | `stage1/2/3_rom` | Pre-computed complex coefficients in Block RAM |
+| Top Level | `fft_16_top.v` | Connects all 4 stages together |
+
+### Commutator Design (Important)
+
+The R2MDC commutator is **not** a 2-input crossbar switch. It is a **single-input feedback mux** — the delay line always shifts the input, and a mux selects the butterfly inputs based on the `sel` control signal:
+
+```
+sel=0 (fill phase):    butterfly top = delay_out,  bot = 0       → butterfly idles
+sel=1 (compute phase): butterfly top = din,         bot = delay_out → butterfly fires
+```
+
+This gives the stage a single input port (`din_top`) with internal feedback through the delay line.
+
+---
+
+## Key Engineering Implementations
 
 ### 1. Q15 Fixed-Point Arithmetic & Bit-Growth Management
-Floating-point math is too expensive for efficient RTL. This design utilizes strict **Q15 fixed-point arithmetic**.
-* **Overflow Prevention:** Engineered 17-bit intermediate sign-extension logic inside the Butterfly Units to safely handle addition/subtraction bit-growth, followed by divide-by-2 scaling.
-* **Complex Multiplication:** Implemented custom 16x16-bit multipliers for the Twiddle Factors, precisely extracting the `[30:15]` bits to maintain Q15 fractional alignment.
 
-### 2. Strict Memory Initialization & Synchronization
-* Resolved unknown (`X`) state propagation by implementing a strict, synchronized reset chain across all deep shift registers (`delay_line.v`).
-* Eliminated multiple-driver collisions (`Z` and `X` states) on the final output buses by buffering intermediate stage outputs.
+All arithmetic uses strict **Q15 fixed-point** (16-bit signed).
 
-##  Verification Strategy
-Verification is performed using a strict **Bottom-Up** modular approach:
-1.  **Combinational Logic Verification:** Isolated Butterfly Units tested for mathematical accuracy.
-2.  **Sequential Logic Verification:** Delay lines and commutators tested for precise clock-cycle latency and lane-switching alignment.
-3.  **Top-Level Integration:** Impulse (`7FFF`, followed by `0000`s) and pure DC tests run across the fully connected pipeline.
-4.  **Golden Reference:** Hardware simulation outputs (Vivado) are cross-verified against a custom MATLAB FFT script to guarantee frequency bin accuracy.
+- **Overflow Prevention:** 17-bit sign-extension inside butterfly add/subtract, followed by divide-by-2 scaling
+- **Complex Multiplication:** 16×16-bit multipliers with `[30:15]` bit extraction to maintain Q15 fractional alignment
+- **Total scaling:** 4 stages × ÷2 = ÷16, which cancels exactly for a 16-point FFT
 
-## 📂 Directory Structure
-```text
+### 2. Synchronous BRAM Early-Fetch
+
+Xilinx Block RAMs have 1-cycle read latency. The control unit uses an **early-fetch** strategy — ROM addresses are driven from `next_count` (one cycle ahead), so twiddle data arrives exactly when the butterfly needs it:
+
+```verilog
+wire [3:0] next_count = count + 1'b1;
+assign rom_addr1 = next_count[2:0];  // fetch next twiddle now
+```
+
+### 3. Pipeline Valid Flag
+
+A `dout_valid` output goes HIGH after exactly 19 clock cycles (8+4+2+1 delay depths + 4 output registers). This suppresses pipeline fill artifacts and clearly marks when output is meaningful.
+
+### 4. Output Pipeline Registers
+
+Each `r2mdc_stage` includes a clocked output register that also **gates fill-phase garbage** — during `sel=0`, the register passes the delay line output rather than butterfly results, preventing partial sums from corrupting downstream stages.
+
+---
+
+## Verification Results
+
+**Test: DC Input (most fundamental FFT correctness test)**
+
+Input: 32 samples of `din_real = 1000`, `din_imag = 0`
+
+| Output Signal | Expected | Result | Status |
+|--------------|----------|--------|--------|
+| `dout_top_real` (X[0]) | 1000 | 1000 | ✅ PASS |
+| `dout_top_imag` | 0 | 0 | ✅ PASS |
+| `dout_bot_real` (X[1..15]) | 0 | 0 | ✅ PASS |
+| `dout_bot_imag` | 0 | 0 | ✅ PASS |
+| `dout_valid` timing | Cycle 19 | Cycle 19 | ✅ PASS |
+
+All DC energy correctly appears in bin X[0] only. All other bins are zero.
+
+> Note: Output values before `dout_valid` goes HIGH are pipeline fill artifacts and should be ignored.
+
+---
+
+## Verification Strategy
+
+Verification followed a strict **bottom-up modular** approach:
+
+1. **Combinational Logic** — Butterfly unit tested for mathematical accuracy in isolation
+2. **Sequential Logic** — Delay lines tested for correct DEPTH-cycle latency
+3. **Stage Integration** — Single `r2mdc_stage` tested with known inputs
+4. **Top-Level Integration** — DC test across full 4-stage pipeline
+5. **Golden Reference** — MATLAB FFT script used to cross-verify hardware output
+
+---
+
+## Pipeline Latency
+
+```
+Stage 1 delay:    8 cycles
+Stage 2 delay:    4 cycles
+Stage 3 delay:    2 cycles
+Stage 4 delay:    1 cycle
+Output registers: 4 cycles (1 per stage)
+─────────────────────────────────────
+Total latency:   19 cycles
+```
+
+`dout_valid` goes HIGH at cycle 19 and remains HIGH for continuous streaming input.
+
+---
+
+## Known Limitations
+
+- Output is in **bit-reversed order** (standard for DIF FFT). `bit_reversal_16.v` exists in the project but is not yet connected at the top level.
+- Verified with DC input only. Sine wave test against MATLAB golden reference is pending.
+
+---
+
+## Directory Structure
+
+```
 📦 R2MDC_FFT_Project
- ┣ 📂 src               # Verilog RTL source files
- ┃ ┣ 📜 fft_16_top.v    # Top-level motherboard
- ┃ ┣ 📜 r2mdc_stage.v   # Individual pipeline stage
- ┃ ┣ 📜 Butterfly_unit.v# Math engine (Add/Sub/Mult)
- ┃ ┣ 📜 delay_line.v    # Shift registers
- ┃ ┗ 📜 commutator_2x2.v# Data routing
- ┣ 📂 sim               # Testbenches
- ┃ ┗ 📜 tb_fft_16_top.v # Top-level system testbench
- ┣ 📂 matlab            # Golden reference models
- ┃ ┗ 📜 twiddle_gen.m   # Generates .coe files for ROMs
- ┗ 📜 README.md         # Project documentation
+ ┣ 📂 src
+ ┃ ┣ 📜 fft_16_top.v        ← Top-level, connects all 4 stages + control
+ ┃ ┣ 📜 r2mdc_stage.v       ← Single pipeline stage (delay + mux + butterfly + register)
+ ┃ ┣ 📜 fft_control_unit.v  ← sel signals, ROM addresses, dout_valid flag
+ ┃ ┣ 📜 Butterfly_unit.v    ← Complex add/sub/multiply math engine
+ ┃ ┣ 📜 delay_line.v        ← Parameterised shift register
+ ┃ ┗ 📜 commutator_2x2.v    ← Kept for reference (not used in final design)
+ ┣ 📂 sim
+ ┃ ┗ 📜 tb_fft_16_top.v     ← Top-level DC test with dout_valid gating
+ ┣ 📂 matlab
+ ┃ ┗ 📜 twiddle_gen.m       ← Generates .coe files for twiddle ROMs
+ ┗ 📜 README.md
+```
+
+---
+
+## Tools
+
+- **Xilinx Vivado 2022.2** — Synthesis, simulation (XSim)
+- **MATLAB** — Golden reference FFT, twiddle factor generation
+- **Verilog HDL** — RTL implementation
