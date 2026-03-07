@@ -178,3 +178,9 @@ Total latency:   19 cycles
 - **Xilinx Vivado 2022.2** — Synthesis, simulation (XSim)
 - **MATLAB** — Golden reference FFT, twiddle factor generation
 - **Verilog HDL** — RTL implementation
+
+## Project Learning Journal[R2MDC_FFT_Learning_Journal.docx](https://github.com/user-attachments/files/25814684/R2MDC_FFT_Learning_Journal.docx)
+
+A detailed personal document covering every bug found, every fix applied,
+and every concept learned during this 10-day build.
+
