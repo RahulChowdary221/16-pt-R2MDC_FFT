@@ -122,6 +122,7 @@ Total latency:   19 cycles
 
 ---
 
+
 ## Known Limitations
 
 - Output is in **bit-reversed order** (standard for DIF FFT). `bit_reversal_16.v` exists in the project but is not yet connected at the top level.
